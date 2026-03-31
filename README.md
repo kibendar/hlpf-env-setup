@@ -6,76 +6,87 @@
 
 - Group: 232/1;
 
-## Практичне заняття №2 — NestJS + PostgreSQL + Redis
+## Практичне заняття №3 — CRUD REST API для MiniShop
 
-## Структура репозиторію
+### Структура репозиторію
 
 ```
 .
-├── src/               # NestJS source code
+├── src/
+│   ├── categories/
+│   │   ├── category.entity.ts
+│   │   ├── categories.module.ts
+│   │   ├── categories.service.ts
+│   │   └── categories.controller.ts
+│   ├── products/
+│   │   ├── product.entity.ts
+│   │   ├── products.module.ts
+│   │   ├── products.service.ts
+│   │   └── products.controller.ts
+│   ├── migrations/
+│   │   ├── 1700000001-CreateTables.ts
+│   │   └── <timestamp>-AddIsActiveToProducts.ts
+│   ├── data-source.ts
+│   └── app.module.ts
 ├── Dockerfile
 ├── docker-compose.yml
-├── .env.example       # шаблон змінних оточення
 └── README.md
 ```
 
-## Запуск проекту
+### Запуск проекту
 
 ```bash
-cp .env.example .env   # налаштувати значення
+cp .env.example .env
 docker compose up --build
 ```
 
-## Перевірка сервісів
+### API Endpoints
+
+| Method | URL                 | Опис               |
+| ------ | ------------------- | ------------------ |
+| GET    | /api/categories     | Список категорій   |
+| GET    | /api/categories/:id | Одна категорія     |
+| POST   | /api/categories     | Створити категорію |
+| PATCH  | /api/categories/:id | Оновити категорію  |
+| DELETE | /api/categories/:id | Видалити категорію |
+| GET    | /api/products       | Список продуктів   |
+| GET    | /api/products/:id   | Один продукт       |
+| POST   | /api/products       | Створити продукт   |
+| PATCH  | /api/products/:id   | Оновити продукт    |
+| DELETE | /api/products/:id   | Видалити продукт   |
+
+### Перевірка міграцій
 
 ```text
-NAME                        IMAGE                COMMAND                  SERVICE    CREATED        STATUS                    PORTS
-hlpf-env-setup-postgres-1   postgres:16-alpine   "docker-entrypoint.s…"   postgres   22 hours ago   Up 11 minutes (healthy)   0.0.0.0:5432->5432/tcp, [::]:5432->5432/tcp
-hlpf-env-setup-redis-1      redis:7-alpine       "docker-entrypoint.s…"   redis      22 hours ago   Up 11 minutes (healthy)   0.0.0.0:6379->6379/tcp, [::]:6379->6379/tcp
+           List of relations
+ Schema |    Name    | Type  |  Owner
+--------+------------+-------+----------
+ public | categories | table | nestuser
+ public | migrations | table | nestuser
+ public | products   | table | nestuser
+(3 rows)
 ```
 
-## Перевірка PostgreSQL
+### Тест створення категорії
 
 ```text
-❯ docker compose exec postgres psql -U nestuser -d nestdb -c '\l'
-                                                      List of databases
-   Name    |  Owner   | Encoding | Locale Provider |  Collate   |   Ctype    | ICU Locale | ICU Rules |   Access privileges
------------+----------+----------+-----------------+------------+------------+------------+-----------+-----------------------
- nestdb    | nestuser | UTF8     | libc            | en_US.utf8 | en_US.utf8 |            |           |
- postgres  | nestuser | UTF8     | libc            | en_US.utf8 | en_US.utf8 |            |           |
- template0 | nestuser | UTF8     | libc            | en_US.utf8 | en_US.utf8 |            |           | =c/nestuser          +
-           |          |          |                 |            |            |            |           | nestuser=CTc/nestuser
- template1 | nestuser | UTF8     | libc            | en_US.utf8 | en_US.utf8 |            |           | =c/nestuser          +
-           |          |          |                 |            |            |            |           | nestuser=CTc/nestuser
+{"id":5,"name":"PC","description":null,"createdAt":"2026-03-31T10:05:10.052Z"}%
 ```
 
-## Перевірка Redis
+### Тест створення продукту
 
 ```text
-PONG
+{"id":3,"name":"Laptop Lenovo","description":null,"price":9.99,"stock":200,"isActive":true,"category":null,"createdAt":"2026-03-31T10:06:08.471Z","updatedAt":"2026-03-31T10:06:08.471Z"}%
 ```
 
-## Перевірка застосунку
+### Тест отримання продуктів
 
 ```text
-Hello World!
+{"id":3,"name":"Laptop Lenovo","description":null,"price":"9.99","stock":200,"isActive":true,"category":null,"createdAt":"2026-03-31T10:06:08.471Z","updatedAt":"2026-03-31T10:06:08.471Z"}%
 ```
 
-## Логи NestJS (фрагмент)
+### Тест 404
 
 ```text
-[8:03:53 PM] Starting compilation in watch mode...
-app-1  |
-app-1  | [8:03:57 PM] Found 0 errors. Watching for file changes.
-app-1  |
-app-1  | [Nest] 29  - 03/30/2026, 8:03:58 PM     LOG [NestFactory] Starting Nest application...
-app-1  | [Nest] 29  - 03/30/2026, 8:03:58 PM     LOG [InstanceLoader] TypeOrmModule dependencies initialized +84ms
-app-1  | [Nest] 29  - 03/30/2026, 8:03:58 PM     LOG [InstanceLoader] ConfigHostModule dependencies initialized +0ms
-app-1  | [Nest] 29  - 03/30/2026, 8:03:58 PM     LOG [InstanceLoader] AppModule dependencies initialized +0ms
-app-1  | [Nest] 29  - 03/30/2026, 8:03:58 PM     LOG [InstanceLoader] ConfigModule dependencies initialized +0ms
-app-1  | [Nest] 29  - 03/30/2026, 8:03:58 PM     LOG [InstanceLoader] CacheModule dependencies initialized +13ms
-app-1  | [Nest] 29  - 03/30/2026, 8:03:58 PM     LOG [InstanceLoader] TypeOrmCoreModule dependencies initialized +50ms
-app-1  | [Nest] 29  - 03/30/2026, 8:03:58 PM     LOG [RoutesResolver] AppController {/}: +7ms
-app-1  | [Nest] 29  - 03/30/2026, 8:03:58 PM     LOG [RouterExplorer] Mapped {/, GET} route +4ms
-app-1  | [Nest] 29  - 03/30/2026, 8:03:58 PM     LOG [NestApplication] Nest application successfully started +3ms
+{"message":"Product #999 not found","error":"Not Found","statusCode":404}%
 ```
