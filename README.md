@@ -377,3 +377,124 @@ curl -s -X POST http://localhost:3000/api/products \
 docker compose exec postgres psql -U nestuser -d nestdb \
   -c "UPDATE users SET role = 'admin' WHERE email = 'admin@test.com';"
 ```
+
+---
+
+## Practical #6 — Interceptors + Exception Filters + Swagger
+
+### Repository structure (additions)
+
+```
+src/
+├── common/
+│   ├── interceptors/
+│   │   ├── logging.interceptor.ts
+│   │   └── transform.interceptor.ts
+│   └── filters/
+│       └── http-exception.filter.ts
+```
+
+### Exercise 1 — LoggingInterceptor
+
+Global interceptor registered in `main.ts`. Logs each request:
+
+```text
+[HTTP] GET /api/categories — 200 — 14ms
+[HTTP] POST /auth/register — 201 — 42ms
+```
+
+### Exercise 2 — TransformInterceptor
+
+Wraps all successful responses in:
+
+```json
+{ "data": <original payload>, "statusCode": 200, "timestamp": "2026-04-20T16:53:37.000Z" }
+```
+
+Swagger UI path (`/api/docs`) is excluded from wrapping to avoid breaking static assets.
+
+**Example — GET /api/categories:**
+
+```json
+{
+  "data": [
+    { "id": 4, "name": "Phone Accessories", "description": null, "createdAt": "2026-03-31T09:34:20.342Z" },
+    { "id": 6, "name": "Electronics", "description": "Gadgets and devices", "createdAt": "2026-04-20T15:29:59.962Z" }
+  ],
+  "statusCode": 200,
+  "timestamp": "2026-04-20T16:53:37.000Z"
+}
+```
+
+### Exercise 3 — HttpExceptionFilter
+
+`@Catch()` global filter. Generates a `traceId` (`randomUUID()`) per request. Returns unified error shape:
+
+```json
+{
+  "error": { "code": <status>, "message": "...", "details": [...], "traceId": "<uuid>" },
+  "timestamp": "2026-04-20T16:54:08.721Z"
+}
+```
+
+**404 Not Found:**
+
+```bash
+curl -s http://localhost:3000/api/products/999
+```
+
+```json
+{
+  "error": {
+    "code": 404,
+    "message": "Product #999 not found",
+    "traceId": "ecb45a04-4709-42c3-ae99-b6a6b174628d"
+  },
+  "timestamp": "2026-04-20T16:54:08.721Z"
+}
+```
+
+**400 Validation failed:**
+
+```bash
+curl -s -X POST http://localhost:3000/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{"email":"notanemail","password":"short"}'
+```
+
+```json
+{
+  "error": {
+    "code": 400,
+    "message": "Validation failed",
+    "details": [
+      "email must be an email",
+      "password must be longer than or equal to 8 characters"
+    ],
+    "traceId": "df4b7fab-83ac-4661-aa39-b2b53e17271d"
+  },
+  "timestamp": "2026-04-20T16:54:39.337Z"
+}
+```
+
+**Error log in console (with traceId):**
+
+```text
+[Exception] [df4b7fab-83ac-4661-aa39-b2b53e17271d] POST /auth/register — 400 — Validation failed
+```
+
+### Exercise 4 — Swagger / OpenAPI
+
+Install:
+
+```bash
+docker compose exec app npm install @nestjs/swagger swagger-ui-express
+```
+
+`DocumentBuilder` configured in `main.ts`, UI served at `/api/docs`. Swagger CLI plugin added to `nest-cli.json` for auto type inference.
+
+**Swagger UI screenshot:**
+
+![Swagger UI](./swagger-screenshot.png)
+
+Swagger docs available at: http://localhost:3000/api/docs
