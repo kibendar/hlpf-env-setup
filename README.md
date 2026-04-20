@@ -224,3 +224,156 @@ curl -s -X POST http://localhost:3000/api/products \
 ```json
 {"message":["name must be shorter than or equal to 255 characters","name must be longer than or equal to 2 characters","name must be a string"],"error":"Bad Request","statusCode":400}
 ```
+
+---
+
+## Practical #5 — JWT Authentication + Guards + RBAC
+
+### Repository structure
+
+```
+.
+├── src/
+│   ├── auth/
+│   │   ├── dto/
+│   │   │   ├── register.dto.ts
+│   │   │   └── login.dto.ts
+│   │   ├── auth.module.ts
+│   │   ├── auth.service.ts
+│   │   └── auth.controller.ts
+│   ├── users/
+│   │   ├── user.entity.ts
+│   │   ├── users.module.ts
+│   │   └── users.service.ts
+│   ├── common/
+│   │   ├── enums/
+│   │   │   └── role.enum.ts
+│   │   ├── guards/
+│   │   │   ├── jwt-auth.guard.ts
+│   │   │   └── roles.guard.ts
+│   │   └── decorators/
+│   │       ├── current-user.decorator.ts
+│   │       └── roles.decorator.ts
+│   └── migrations/
+│       └── 1776700258089-CreateUsers.ts
+```
+
+### Exercise 1 — Install packages
+
+```bash
+docker compose exec app npm install @nestjs/jwt bcrypt
+docker compose exec app npm install -D @types/bcrypt
+```
+
+Output:
+```text
+added 18 packages, and audited 795 packages in 6s
+added 1 package, and audited 796 packages in 5s
+```
+
+### Exercise 2 — users table verification
+
+```bash
+docker compose exec postgres psql -U nestuser -d nestdb -c "\d users"
+```
+
+```text
+                                         Table "public.users"
+    Column    |            Type             | Collation | Nullable |              Default
+--------------+-----------------------------+-----------+----------+-----------------------------------
+ id           | integer                     |           | not null | nextval('users_id_seq'::regclass)
+ email        | character varying           |           | not null |
+ passwordHash | character varying           |           | not null |
+ name         | character varying(100)      |           |          |
+ role         | users_role_enum             |           | not null | 'user'::users_role_enum
+ createdAt    | timestamp without time zone |           | not null | now()
+```
+
+### Test results (Exercise 10)
+
+**1. Register new user — 201 Created (no passwordHash in response):**
+
+```bash
+curl -s -X POST http://localhost:3000/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{"email": "admin@test.com", "password": "password123", "name": "Admin"}'
+```
+
+```json
+{"id":1,"email":"admin@test.com","name":"Admin","role":"user","createdAt":"2026-04-20T16:05:08.324Z"}
+```
+
+**2. Duplicate email — 409 Conflict:**
+
+```bash
+curl -s -X POST http://localhost:3000/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{"email": "user@test.com", "password": "otherpass123"}'
+```
+
+```json
+{"message":"User with this email already exists","error":"Conflict","statusCode":409}
+```
+
+**3. Login — 200 OK with accessToken:**
+
+```bash
+curl -s -X POST http://localhost:3000/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email": "admin@test.com", "password": "password123"}'
+```
+
+```json
+{"accessToken":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."}
+```
+
+**4. Wrong password — 401 Unauthorized:**
+
+```json
+{"message":"Invalid credentials","error":"Unauthorized","statusCode":401}
+```
+
+**5. GET /api/products without token — 200 OK (public):**
+
+```bash
+curl http://localhost:3000/api/products
+# returns array of products
+```
+
+**6. POST /api/products without token — 401 Unauthorized:**
+
+```bash
+curl -s -X POST http://localhost:3000/api/products \
+  -H "Content-Type: application/json" \
+  -d '{"name": "Hacked Product", "price": 1}'
+```
+
+```json
+{"message":"Missing authorization token","error":"Unauthorized","statusCode":401}
+```
+
+**7. POST /api/products with USER token — 403 Forbidden:**
+
+```json
+{"message":"Insufficient permissions","error":"Forbidden","statusCode":403}
+```
+
+**8. POST /api/products with ADMIN token — 201 Created:**
+
+```bash
+curl -s -X POST http://localhost:3000/api/products \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <ADMIN_TOKEN>" \
+  -d '{"name": "MacBook Pro", "price": 2499.99, "stock": 10}'
+```
+
+```json
+{"id":5,"name":"MacBook Pro","description":null,"price":2499.99,"stock":10,"isActive":true,"category":null,"createdAt":"2026-04-20T16:05:45.489Z","updatedAt":"2026-04-20T16:05:45.489Z"}
+```
+
+**9. Set admin role in DB:**
+
+```bash
+docker compose exec postgres psql -U nestuser -d nestdb \
+  -c "UPDATE users SET role = 'admin' WHERE email = 'admin@test.com';"
+```
