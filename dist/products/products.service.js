@@ -37,30 +37,22 @@ let ProductsService = class ProductsService {
         }
         return product;
     }
-    async create(data) {
+    async create(dto) {
         const product = this.productRepo.create({
-            name: data.name,
-            description: data.description,
-            price: data.price,
-            stock: data.stock ?? 0,
-            category: data.categoryId ? { id: data.categoryId } : null,
+            name: dto.name,
+            description: dto.description,
+            price: dto.price,
+            stock: dto.stock ?? 0,
+            category: dto.categoryId ? { id: dto.categoryId } : null,
         });
         return this.productRepo.save(product);
     }
-    async update(id, data) {
+    async update(id, dto) {
         const product = await this.findOne(id);
-        if (data.name !== undefined)
-            product.name = data.name;
-        if (data.description !== undefined)
-            product.description = data.description;
-        if (data.price !== undefined)
-            product.price = data.price;
-        if (data.stock !== undefined)
-            product.stock = data.stock;
-        if (data.isActive !== undefined)
-            product.isActive = data.isActive;
-        if (data.categoryId !== undefined) {
-            product.category = { id: data.categoryId };
+        const { categoryId, ...fields } = dto;
+        Object.assign(product, fields);
+        if (categoryId !== undefined) {
+            product.category = { id: categoryId };
         }
         return this.productRepo.save(product);
     }
