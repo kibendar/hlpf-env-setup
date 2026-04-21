@@ -19,6 +19,7 @@ const swagger_1 = require("@nestjs/swagger");
 const products_service_1 = require("./products.service");
 const create_product_dto_1 = require("./dto/create-product.dto");
 const update_product_dto_1 = require("./dto/update-product.dto");
+const product_query_dto_1 = require("./dto/product-query.dto");
 const jwt_auth_guard_1 = require("../common/guards/jwt-auth.guard");
 const roles_guard_1 = require("../common/guards/roles.guard");
 const roles_decorator_1 = require("../common/decorators/roles.decorator");
@@ -28,8 +29,8 @@ let ProductsController = class ProductsController {
     constructor(productsService) {
         this.productsService = productsService;
     }
-    findAll() {
-        return this.productsService.findAll();
+    findAll(query) {
+        return this.productsService.findAll(query);
     }
     findOne(id) {
         return this.productsService.findOne(id);
@@ -47,10 +48,14 @@ let ProductsController = class ProductsController {
 exports.ProductsController = ProductsController;
 __decorate([
     (0, common_1.Get)(),
-    (0, swagger_1.ApiOperation)({ summary: 'Get all products', description: 'Returns a list of all products with embedded categories. Public endpoint.' }),
-    (0, swagger_1.ApiResponse)({ status: 200, description: 'List of products' }),
+    (0, swagger_1.ApiOperation)({
+        summary: 'Get products with pagination',
+        description: 'Returns paginated list with { items, meta }. Supports pagination, sorting, filtering and search.',
+    }),
+    (0, swagger_1.ApiResponse)({ status: 200, description: 'Paginated list with { items, meta }' }),
+    __param(0, (0, common_1.Query)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", []),
+    __metadata("design:paramtypes", [product_query_dto_1.ProductQueryDto]),
     __metadata("design:returntype", void 0)
 ], ProductsController.prototype, "findAll", null);
 __decorate([
