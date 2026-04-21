@@ -498,3 +498,227 @@ docker compose exec app npm install @nestjs/swagger swagger-ui-express
 ![Swagger UI](./swagger-screenshot.png)
 
 Swagger docs available at: http://localhost:3000/api/docs
+
+---
+
+## Practical #7 — Redis + Pagination + Filtering
+
+### Launch
+
+```bash
+cp .env.example .env
+docker compose up --build
+docker compose exec app node_modules/.bin/ts-node -r tsconfig-paths/register src/seeds/seed.ts
+```
+
+### API: GET /api/products
+
+| Parameter  | Type    | Default    | Description              |
+|------------|---------|------------|--------------------------|
+| page       | number  | 1          | Page number              |
+| pageSize   | number  | 10 (max 100)| Items per page          |
+| sort       | string  | createdAt  | Sort field               |
+| order      | asc/desc| desc       | Sort direction           |
+| categoryId | number  | —          | Filter by category       |
+| minPrice   | number  | —          | Minimum price            |
+| maxPrice   | number  | —          | Maximum price            |
+| search     | string  | —          | Search by name (ILIKE)   |
+
+### Test pagination
+
+```bash
+curl "http://localhost:3000/api/products?page=1&pageSize=5"
+```
+
+```json
+{
+  "data": {
+    "items": [ ... ],
+    "meta": { "page": 1, "pageSize": 5, "total": 34, "totalPages": 7 }
+  },
+  "statusCode": 200,
+  "timestamp": "..."
+}
+```
+
+### Test filtering
+
+```bash
+curl "http://localhost:3000/api/products?categoryId=6&sort=price&order=asc&pageSize=3"
+```
+
+### Test search
+
+```bash
+curl "http://localhost:3000/api/products?search=mac"
+```
+
+```text
+["MacBook Pro v3", "MacBook Pro v2", "MacBook Pro", "MacBook Pro"]
+```
+
+### Test invalid pageSize -> 400
+
+```bash
+curl "http://localhost:3000/api/products?pageSize=999"
+```
+
+```json
+{ "error": { "code": 400, "details": ["pageSize must not be greater than 100"] } }
+```
+
+### Test caching (Redis)
+
+```bash
+# First request — stored in Redis
+curl "http://localhost:3000/api/products?page=1&pageSize=5"
+
+# Check Redis keys
+docker compose exec redis redis-cli KEYS "*"
+# Returns: cache::cache:products:{"page":1,"pageSize":5,"sort":"createdAt","order":"desc"}
+```
+
+### Test cache invalidation
+
+```bash
+# Before POST
+docker compose exec redis redis-cli KEYS "cache::cache:products:*"
+# Returns: 1 key
+
+# Create product (admin token required)
+curl -X POST http://localhost:3000/api/products \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <ADMIN_TOKEN>" \
+  -d '{"name": "Fresh Product", "price": 42}'
+
+# After POST — cache cleared
+docker compose exec redis redis-cli KEYS "cache::cache:products:*"
+# Returns: (empty array)
+```
+
+---
+
+## Practical #8 — Orders Module: Final MiniShop Project
+
+### Repository structure (final)
+
+```
+src/
+├── orders/
+│   ├── entities/
+│   │   ├── order.entity.ts
+│   │   └── order-item.entity.ts
+│   ├── dto/
+│   │   ├── create-order.dto.ts
+│   │   ├── create-order-item.dto.ts
+│   │   ├── update-order-status.dto.ts
+│   │   └── order-query.dto.ts
+│   ├── orders.module.ts
+│   ├── orders.service.ts
+│   └── orders.controller.ts
+├── common/enums/
+│   └── order-status.enum.ts
+└── migrations/
+    └── 1776760961759-CreateOrders.ts
+```
+
+### API Endpoints
+
+#### Auth
+| Method | URL            | Auth | Description             |
+|--------|----------------|------|-------------------------|
+| POST   | /auth/register | —    | Registration            |
+| POST   | /auth/login    | —    | Login → JWT             |
+
+#### Categories
+| Method | URL                   | Auth  | Description   |
+|--------|-----------------------|-------|---------------|
+| GET    | /api/categories       | —     | List          |
+| GET    | /api/categories/:id   | —     | One           |
+| POST   | /api/categories       | admin | Create        |
+| PATCH  | /api/categories/:id   | admin | Update        |
+| DELETE | /api/categories/:id   | admin | Delete        |
+
+#### Products
+| Method | URL                   | Auth  | Description                   |
+|--------|-----------------------|-------|-------------------------------|
+| GET    | /api/products         | —     | List + pagination + filter     |
+| GET    | /api/products/:id     | —     | One                           |
+| POST   | /api/products         | admin | Create                        |
+| PATCH  | /api/products/:id     | admin | Update                        |
+| DELETE | /api/products/:id     | admin | Delete                        |
+
+#### Orders
+| Method | URL                      | Auth  | Description             |
+|--------|--------------------------|-------|-------------------------|
+| POST   | /api/orders              | user  | Create order            |
+| GET    | /api/orders              | user  | My orders / All (admin) |
+| GET    | /api/orders/:id          | user  | One (ownership check)   |
+| PATCH  | /api/orders/:id/status   | admin | Change status           |
+| DELETE | /api/orders/:id          | admin | Delete order            |
+
+### DB tables verification
+
+```text
+orders: id, status, totalPrice, userId, createdAt
+order_items: id, quantity, price, orderId, productId
+```
+
+### Test — create order
+
+```bash
+curl -X POST http://localhost:3000/api/orders \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $ALICE_TOKEN" \
+  -d '{"items":[{"productId":31,"quantity":2},{"productId":21,"quantity":1}]}'
+```
+
+```json
+{
+  "data": {
+    "id": 1,
+    "status": "pending",
+    "totalPrice": "107.00",
+    "items": [ ... ]
+  },
+  "statusCode": 201
+}
+```
+
+### Test — ownership check (403)
+
+```bash
+curl http://localhost:3000/api/orders/1 -H "Authorization: Bearer $BOB_TOKEN"
+```
+
+```json
+{ "error": { "code": 403, "message": "You can only view your own orders" } }
+```
+
+### Test — status transition
+
+```bash
+# pending -> confirmed (OK)
+curl -X PATCH http://localhost:3000/api/orders/1/status \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -d '{"status":"confirmed"}'
+# -> 200, status: confirmed
+
+# confirmed -> pending (invalid transition -> 400)
+curl -X PATCH http://localhost:3000/api/orders/1/status \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -d '{"status":"pending"}'
+# -> 400, Cannot transition from "confirmed" to "pending"
+```
+
+### Test — insufficient stock (400)
+
+```bash
+curl -X POST http://localhost:3000/api/orders \
+  -H "Authorization: Bearer $BOB_TOKEN" \
+  -d '{"items":[{"productId":31,"quantity":99999}]}'
+```
+
+```json
+{ "error": { "code": 400, "message": "Insufficient stock for \"USB-C Cable v3\": available 498, requested 99999" } }
+```
